@@ -1,16 +1,19 @@
 #if (!require("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
+#  install.packages("BiocManager")
 #BiocManager::install("GO.db")
 #BiocManager::install("DESeq2")
-
+#BiocManager::install("goseq")
+#BiocManager::install("org.Hs.eg.db")
 #install.packages("dplyr")
-
 
 library(dplyr)
 library(ggplot2)
 library(BiocManager)
 library(GO.db)
 library(DESeq2)
+library(goseq)
+library(org.Hs.eg.db)
+
 
 #read in an example RNAseq file
 example_childhood_AML <- read.table("TARGET-NCI-AML-RNAseq-data/TARGET-20-PABGKN-09A-01R.gene.quantification.txt",sep="\t",header=T)
@@ -60,6 +63,10 @@ AML_metadata <- unique(AML_metadata)
 #Keep only the metadata that we have RNAseq data for
 AML_metadata <- AML_metadata[(AML_metadata$Sample.Name %in% colnames(RNAseq_df)), ]
 
+#We are only interested in bone marrow samples, so subset the metadata to only include BM samples.
+AML_metadata <- AML_metadata[AML_metadata$Characteristics.OrganismPart. == 'Bone Marrow',]
+
+
 #Creates new RNAseq dataframe with genes as rownames, and metadata dataframe with sample names as rownames
 RNAseq_df_RN <- data.frame(RNAseq_df, row.names=1)
 AML_metadata_RN <- data.frame(AML_metadata, row.names=4)
@@ -73,9 +80,66 @@ for (name in colnames(RNAseq_df_RN)){
 }
 colnames(RNAseq_df_RN) <- c(new_names)
 
+#We need to only keep the RNAseq data for BM samples.
+RNAseq_df_RN<- RNAseq_df_RN[,(c(BM_metadata$Sample.Name))]
 
-#Create the deseq2 object， design separating by childhood AML vs recurrent AML ()
+#Create the deseq2 object, design separating by childhood AML vs recurrent AML ()
 ddseq_obj <- DESeqDataSetFromMatrix(countData=RNAseq_df_RN, colData=AML_metadata_RN, design=~Characteristics.DiseaseState.)
+
+
+#The user can set their own rowsum and fdr threshold.
+rowsum.threshold <- 1
+fdr.threshold <- 0.1
+
+rs <- rowSums(counts(ddseq_obj))
+#filters out genes that are not expressed at all across samples
+ddseq_go <- ddseq_obj[rs > rowsum.threshold,]
+#calculate a new deseq_object
+ddseq_go <- DESeq(ddseq_go)
+#obtain deseq results and filter by count threshold
+#The states in contrast can be flipped.
+res_go <- results(ddseq_go, contrast=c("Characteristics.DiseaseState.", "Recurrent Childhood Acute Myeloid Leukemia","Childhood Acute Myeloid Leukemia"), independentFiltering=FALSE)
+assayed.genes <- rownames(res_go)
+de.genes <- rownames(res_go)[which(res_go$padj < fdr.threshold)]
+#obtain a vector of differentially-expressed genes, with each element being
+#either 1 or 0, with 1 as differentially-expressed, and 0 as not.
+gene.vector=as.integer(assayed.genes %in%de.genes)
+names(gene.vector)=assayed.genes
+
+#Create the null distribution to account for transcript length bias affecting De
+#supportedOrganisms()[supportedOrganisms()$Genome=="hg19",]
+pwf = nullp(gene.vector, "hg19", "ensGene")
+
+#Obtain the list of bio-processes that are over/under represented in childhood
+#versus recurrent AML.
+GO.BP=goseq(pwf,'hg19','ensGene',test.cats=c("GO:BP"))
+
+#Plot the top over-represented GO groups.
+GO.BP %>% 
+  top_n(20, wt=-over_represented_pvalue) %>% 
+  mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
+  ggplot(aes(x=hitsPerc, 
+             y=term, 
+             colour=over_represented_pvalue, 
+             size=numDEInCat)) +
+  geom_point() +
+  expand_limits(x=0) +
+  labs(x="Hits (%)", y="GO term", colour="p value", size="Count")
+
+#GO.BP %>% 
+#  top_n(20, wt=-under_represented_pvalue) %>% 
+#  mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
+#  ggplot(aes(x=hitsPerc, 
+#             y=term, 
+#             colour=over_represented_pvalue, 
+#             size=numDEInCat)) +
+#  geom_point() +
+#  expand_limits(x=0) +
+#  labs(x="Hits (%)", y="GO term", colour="p value", size="Count")
+
+#Can also obtain all GO groups.
+#GO.wall=goseq(pwf,"hg19","ensGene")
+#head(GO.wall)
 
 #DESeq fills in the DEseq object with information including 
 #normalization, dispersion estimates, differential expression 
@@ -83,7 +147,7 @@ ddseq_obj <- DESeqDataSetFromMatrix(countData=RNAseq_df_RN, colData=AML_metadata
 ddseq_obj <- DESeq(ddseq_obj)
 
 #visualize the ddseq object in a dataframe
-res <- as_tibble(results(ddseq_obj,tidy=TRUE))
+res <- as_tibble(results(ddseq_obj,contrast=c("Characteristics.DiseaseState.", "Childhood Acute Myeloid Leukemia","Recurrent Childhood Acute Myeloid Leukemia"),tidy=TRUE))
 #Add a column, sig, that is TRUE if padj is <0.05, false otherwise.
 res <- res %>% mutate(sig=padj<0.05)
 
@@ -92,3 +156,10 @@ res <- res %>% mutate(sig=padj<0.05)
 #Make a volcano plot to show differential gene expression for childhood vs recurrent AML.
 #Future edits to this figure (not yet implemented) will examine peripheral vs bone marrow samples and label genes in microenvironment sets.
 res %>% ggplot(aes(log2FoldChange, -1*log10(pvalue), col=sig)) + geom_point() + ggtitle("Volcano plot of gene expression for childhood vs recurrent AML")
+
+#Create a PCA, coloring by disease state.
+rld <- vst(ddseq_obj)
+plotPCA(rld, intgroup="Characteristics.DiseaseState.")
+
+
+
