@@ -1,5 +1,5 @@
 Overview:
-At a high level, this repo (specifically, this branch) provides the necessary TARGET-AML RNAseq data, metadata, and R code to reproduce one figure (a rough draft of a volcano plot showing differential gene expression between childhood AML and recurrent AML) from our (Kenneth and Amy's) project. 
+At a high level, this repo provides the necessary TARGET-AML RNAseq data, metadata, and R code to reproduce one figure (a rough draft of a volcano plot showing differential gene expression between childhood AML and recurrent AML) from our (Kenneth and Amy's) project. 
 
 References: Love MI, Huber W, Anders S (2014). “Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2.” Genome Biology, 15, 550. doi:10.1186/s13059-014-0550-8.
 Bolouri, H., Farrar, J., Triche, T. et al. The molecular landscape of pediatric acute myeloid leukemia reveals recurrent structural alterations and age-specific mutational interactions. Nat Med 24, 103–112 (2018). https://doi.org/10.1038/nm.4439
