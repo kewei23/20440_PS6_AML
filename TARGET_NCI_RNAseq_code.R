@@ -15,12 +15,18 @@ library(goseq)
 library(org.Hs.eg.db)
 
 
-#read in an example RNAseq file
-example_childhood_AML <- read.table("TARGET-NCI-AML-RNAseq-data/TARGET-20-PABGKN-09A-01R.gene.quantification.txt",sep="\t",header=T)
+#read in an example RNAseq file 
+example_childhood_AML <- read.table("TARGET-NCI-AML-RNAseq-data/TARGET-20-PABGKN-09A-01R.gene.quantification.txt",
+                                    sep="\t",
+                                    header=T)
 
 #import the list of RNAseq files
-RNAseq_files <- list.files(path="TARGET-NCI-AML-RNAseq-data", pattern="*.txt", full.names=TRUE, recursive=FALSE) 
+RNAseq_files <- list.files(path="TARGET-NCI-AML-RNAseq-data",
+                           pattern="*.txt", 
+                           full.names=TRUE, 
+                           recursive=FALSE) 
 
+#Note: switched to manually pre-processing data files, but run this if not pre-processed
 #Only obtain files that are RNAseq gene quant.
 #for (f in files){                          
 #  if (grepl("gene", f, fixed=TRUE) == F){
@@ -57,7 +63,13 @@ for (file in RNAseq_files){
 AML_metadata <- read.table("TARGET_AML_mRNA-seq_metadata.txt",sep="\t",header=T)
 
 #drop the columns we do not require and remove duplicate entries
-AML_metadata <- dplyr::select(AML_metadata, -Source.Name, -Provider,-Material.Type, -Characteristics.Organism., -Performer, -Protocol.REF)
+AML_metadata <- dplyr::select(AML_metadata, 
+                              -Source.Name, 
+                              -Provider,
+                              -Material.Type, 
+                              -Characteristics.Organism., 
+                              -Performer, 
+                              -Protocol.REF)
 AML_metadata <- unique(AML_metadata) 
 
 #Keep only the metadata that we have RNAseq data for
@@ -81,10 +93,12 @@ for (name in colnames(RNAseq_df_RN)){
 colnames(RNAseq_df_RN) <- c(new_names)
 
 #We need to only keep the RNAseq data for BM samples.
-RNAseq_df_RN<- RNAseq_df_RN[,(c(BM_metadata$Sample.Name))]
+RNAseq_df_RN<- RNAseq_df_RN[,(c(AML_metadata$Sample.Name))]
 
-#Create the deseq2 object, design separating by childhood AML vs recurrent AML ()
-ddseq_obj <- DESeqDataSetFromMatrix(countData=RNAseq_df_RN, colData=AML_metadata_RN, design=~Characteristics.DiseaseState.)
+#Create the deseq2 object, design separating by childhood AML vs recurrent AML 
+ddseq_obj <- DESeqDataSetFromMatrix(countData=RNAseq_df_RN, 
+                                    colData=AML_metadata_RN, 
+                                    design=~Characteristics.DiseaseState.)
 
 
 #The user can set their own rowsum and fdr threshold.
@@ -98,7 +112,11 @@ ddseq_go <- ddseq_obj[rs > rowsum.threshold,]
 ddseq_go <- DESeq(ddseq_go)
 #obtain deseq results and filter by count threshold
 #The states in contrast can be flipped.
-res_go <- results(ddseq_go, contrast=c("Characteristics.DiseaseState.", "Recurrent Childhood Acute Myeloid Leukemia","Childhood Acute Myeloid Leukemia"), independentFiltering=FALSE)
+res_go <- results(ddseq_go, 
+                  contrast=c("Characteristics.DiseaseState.", 
+                             "Recurrent Childhood Acute Myeloid Leukemia",
+                             "Childhood Acute Myeloid Leukemia"), 
+                  independentFiltering=FALSE)
 assayed.genes <- rownames(res_go)
 de.genes <- rownames(res_go)[which(res_go$padj < fdr.threshold)]
 #obtain a vector of differentially-expressed genes, with each element being
@@ -147,15 +165,20 @@ GO.BP %>%
 ddseq_obj <- DESeq(ddseq_obj)
 
 #visualize the ddseq object in a dataframe
-res <- as_tibble(results(ddseq_obj,contrast=c("Characteristics.DiseaseState.", "Childhood Acute Myeloid Leukemia","Recurrent Childhood Acute Myeloid Leukemia"),tidy=TRUE))
+res <- as_tibble(results(ddseq_obj,
+                         contrast=c("Characteristics.DiseaseState.", 
+                                    "Childhood Acute Myeloid Leukemia",
+                                    "Recurrent Childhood Acute Myeloid Leukemia"),
+                         tidy=TRUE))
 #Add a column, sig, that is TRUE if padj is <0.05, false otherwise.
 res <- res %>% mutate(sig=padj<0.05)
 
-#res %>% ggplot(aes(baseMean, log2FoldChange, col=sig)) + geom_point() + scale_x_log10() + ggtitle("MA plot")
-
 #Make a volcano plot to show differential gene expression for childhood vs recurrent AML.
-#Future edits to this figure (not yet implemented) will examine peripheral vs bone marrow samples and label genes in microenvironment sets.
-res %>% ggplot(aes(log2FoldChange, -1*log10(pvalue), col=sig)) + geom_point() + ggtitle("Volcano plot of gene expression for childhood vs recurrent AML")
+#Not yet implemented: examine peripheral blood vs bone marrow samples
+#Not yet implemented: label genes in microenvironment sets.
+res %>% ggplot(aes(log2FoldChange, -1*log10(pvalue), col=sig)) + 
+  geom_point() + 
+  ggtitle("Volcano plot of gene expression for childhood vs recurrent AML")
 
 #Create a PCA, coloring by disease state.
 rld <- vst(ddseq_obj)
