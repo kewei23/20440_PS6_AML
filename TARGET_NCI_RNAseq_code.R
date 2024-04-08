@@ -51,7 +51,6 @@ for (file in RNAseq_files){
   file_name <- head(file_name, -1)
   file_name <- paste(file_name, collapse='-')
   
-  
   #Add the raw counts column from each patient matching to the patient/sample name, only if it is not duplicated
   if (!(file_name %in% colnames(RNAseq_df))){
     RNAseq_df$raw_counts <- file_df$raw_counts
@@ -75,13 +74,10 @@ AML_metadata <- unique(AML_metadata)
 #Keep only the metadata that we have RNAseq data for
 AML_metadata <- AML_metadata[(AML_metadata$Sample.Name %in% colnames(RNAseq_df)), ]
 
-#We are only interested in bone marrow samples, so subset the metadata to only include BM samples.
-AML_metadata <- AML_metadata[AML_metadata$Characteristics.OrganismPart. == 'Bone Marrow',]
-
 
 #Creates new RNAseq dataframe with genes as rownames, and metadata dataframe with sample names as rownames
 RNAseq_df_RN <- data.frame(RNAseq_df, row.names=1)
-AML_metadata_RN <- data.frame(AML_metadata, row.names=4)
+AML_metadata <- data.frame(AML_metadata, row.names=4)
 
 #For some reason, when converting gene names in RNAseq_RN to row names, the "-" in sample names is replaced with "."
 #This creates errors when making the deseq2 object. So the following code replaces the "." with "-" in the column names
@@ -92,68 +88,133 @@ for (name in colnames(RNAseq_df_RN)){
 }
 colnames(RNAseq_df_RN) <- c(new_names)
 
-#We need to only keep the RNAseq data for BM samples.
-RNAseq_df_RN<- RNAseq_df_RN[,(c(AML_metadata$Sample.Name))]
+#Subset the metadata to sample tissue: Bone Marrow vs. Peripheral Blood
+AML_metadata_BM <- AML_metadata[AML_metadata$Characteristics.OrganismPart. == 'Bone Marrow',]
+AML_metadata_PB <- AML_metadata[AML_metadata$Characteristics.OrganismPart. == 'Peripheral Blood',]
 
-#Create the deseq2 object, design separating by childhood AML vs recurrent AML 
-ddseq_obj <- DESeqDataSetFromMatrix(countData=RNAseq_df_RN, 
-                                    colData=AML_metadata_RN, 
+#Subset the metadata to disease state: Primary AML vs. Recurrent AML
+AML_metadata_Primary <- AML_metadata[AML_metadata$Characteristics.DiseaseState. == 'Childhood Acute Myeloid Leukemia',]
+AML_metadata_Recurrent <- AML_metadata[AML_metadata$Characteristics.DiseaseState. == 'Recurrent Childhood Acute Myeloid Leukemia',]
+
+#Subset the RNAseq dataset according to the metadata subsets
+RNAseq_df_BM <- RNAseq_df_RN[, rownames(AML_metadata_BM)]
+RNAseq_df_PB <- RNAseq_df_RN[, rownames(AML_metadata_PB)]
+RNAseq_df_Primary <- RNAseq_df_RN[, rownames(AML_metadata_Primary)]
+RNAseq_df_Recurrent <- RNAseq_df_RN[, rownames(AML_metadata_Recurrent)]
+
+#Create the deseq2 objects for each group: 
+#using only BM, compare primary vs recurrent childhood AML 
+ddseq_obj_BM <- DESeqDataSetFromMatrix(countData=RNAseq_df_BM, 
+                                    colData=AML_metadata_BM, 
                                     design=~Characteristics.DiseaseState.)
+#using only PB, compare primary vs recurrent childhood AML 
+ddseq_obj_PB <- DESeqDataSetFromMatrix(countData=RNAseq_df_PB, 
+                                    colData=AML_metadata_PB, 
+                                    design=~Characteristics.DiseaseState.)
+#using only Primary, compare BM vs PB
+ddseq_obj_Primary <- DESeqDataSetFromMatrix(countData=RNAseq_df_Primary, 
+                                    colData=AML_metadata_Primary, 
+                                    design=~Characteristics.OrganismPart.)
+#using only Recurrent, compare BM vs PB
+ddseq_obj_Recurrent <- DESeqDataSetFromMatrix(countData=RNAseq_df_Recurrent, 
+                                    colData=AML_metadata_Recurrent, 
+                                    design=~Characteristics.OrganismPart.)
 
 
 #The user can set their own rowsum and fdr threshold.
 rowsum.threshold <- 1
 fdr.threshold <- 0.1
 
-rs <- rowSums(counts(ddseq_obj))
 #filters out genes that are not expressed at all across samples
-ddseq_go <- ddseq_obj[rs > rowsum.threshold,]
-#calculate a new deseq_object
-ddseq_go <- DESeq(ddseq_go)
-#obtain deseq results and filter by count threshold
-#The states in contrast can be flipped.
-res_go <- results(ddseq_go, 
-                  contrast=c("Characteristics.DiseaseState.", 
-                             "Recurrent Childhood Acute Myeloid Leukemia",
-                             "Childhood Acute Myeloid Leukemia"), 
-                  independentFiltering=FALSE)
-assayed.genes <- rownames(res_go)
-de.genes <- rownames(res_go)[which(res_go$padj < fdr.threshold)]
-#obtain a vector of differentially-expressed genes, with each element being
-#either 1 or 0, with 1 as differentially-expressed, and 0 as not.
-gene.vector=as.integer(assayed.genes %in%de.genes)
-names(gene.vector)=assayed.genes
+ddseq_go_BM <- ddseq_obj_BM[rowSums(counts(ddseq_obj_BM)) > rowsum.threshold,]
+ddseq_go_PB <- ddseq_obj_PB[rowSums(counts(ddseq_obj_PB)) > rowsum.threshold,]
+ddseq_go_Primary <- ddseq_obj_Primary[rowSums(counts(ddseq_obj_Primary))> rowsum.threshold,]
+ddseq_go_Recurrent <- ddseq_obj_Recurrent[rowSums(counts(ddseq_obj_Recurrent)) > rowsum.threshold,]
 
-#Create the null distribution to account for transcript length bias affecting De
-#supportedOrganisms()[supportedOrganisms()$Genome=="hg19",]
-pwf = nullp(gene.vector, "hg19", "ensGene")
+#DESeq fills in the DEseq object with information including 
+#normalization, dispersion estimates, differential expression 
+#results, etc. This code can take a little while to run
+ddseq_go_BM <- DESeq(ddseq_go_BM)
+ddseq_go_PB <- DESeq(ddseq_go_PB)
+ddseq_go_Primary <- DESeq(ddseq_go_Primary)
+ddseq_go_Recurrent <- DESeq(ddseq_go_Recurrent)
 
-#Obtain the list of bio-processes that are over/under represented in childhood
-#versus recurrent AML.
-GO.BP=goseq(pwf,'hg19','ensGene',test.cats=c("GO:BP"))
+# Helper function! perform GO enrichment analysis, generate plots
+perform_GO_enrichment_analysis <- function(ddseq_obj, contrast_values, fdr_threshold) {
+  # Obtain DESeq results and filter by count threshold
+  res <- results(ddseq_obj,
+                 contrast = contrast_values,
+                 independentFiltering = FALSE)
+  
+  # Extract differentially expressed genes based on FDR threshold
+  assayed_genes <- rownames(res)
+  de_genes <- rownames(res)[which(res$padj < fdr_threshold)]
+  
+  # Create a binary vector indicating differential expression
+  gene_vector <- as.integer(assayed_genes %in% de_genes)
+  names(gene_vector) <- assayed_genes
+  
+  # Create the null distribution to account for transcript length bias
+  pwf <- nullp(gene_vector, "hg19", "ensGene")
+  
+  # Perform Gene Ontology enrichment analysis
+  GO_BP <- goseq(pwf, 'hg19', 'ensGene', test.cats = c("GO:BP"))
+  
+  # Plot the top over-represented GO groups
+  GO_BP %>%
+    top_n(20, wt = -over_represented_pvalue) %>%
+    mutate(hitsPerc = numDEInCat * 100 / numInCat) %>%
+    ggplot(aes(x = hitsPerc,
+               y = term,
+               colour = over_represented_pvalue,
+               size = numDEInCat)) +
+    geom_point() +
+    expand_limits(x = 0) +
+    labs(x = "Hits (%)", y = "GO term", colour = "p value", size = "Count")
+}
 
-#Plot the top over-represented GO groups.
-GO.BP %>% 
-  top_n(20, wt=-over_represented_pvalue) %>% 
-  mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
-  ggplot(aes(x=hitsPerc, 
-             y=term, 
-             colour=over_represented_pvalue, 
-             size=numDEInCat)) +
-  geom_point() +
-  expand_limits(x=0) +
-  labs(x="Hits (%)", y="GO term", colour="p value", size="Count")
+contrast_by_DiseaseState = c("Characteristics.DiseaseState.",
+                               "Recurrent Childhood Acute Myeloid Leukemia", 
+                               "Childhood Acute Myeloid Leukemia")
+contrast_by_OrganismPart = c("Characteristics.OrganismPart.",
+                              "Bone Marrow", 
+                              "Peripheral Blood")
 
-#GO.BP %>% 
-#  top_n(20, wt=-under_represented_pvalue) %>% 
-#  mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
-#  ggplot(aes(x=hitsPerc, 
-#             y=term, 
-#             colour=over_represented_pvalue, 
-#             size=numDEInCat)) +
-#  geom_point() +
-#  expand_limits(x=0) +
-#  labs(x="Hits (%)", y="GO term", colour="p value", size="Count")
+perform_GO_enrichment_analysis(ddseq_go_BM, contrast_by_DiseaseState, fdr.threshold)
+perform_GO_enrichment_analysis(ddseq_go_PB, contrast_by_DiseaseState, fdr.threshold)
+perform_GO_enrichment_analysis(ddseq_go_Primary, contrast_by_OrganismPart, fdr.threshold)
+perform_GO_enrichment_analysis(ddseq_go_Recurrent,contrast_by_OrganismPart, fdr.threshold)
+
+#Helper function! RNAseq analysis:
+perform_rnaseq_analysis <- function(ddseq_obj, contrast_values, title) {
+  # Visualize the ddseq object in a dataframe
+  res <- as_tibble(results(ddseq_obj,
+                           contrast = contrast_values,
+                           tidy = TRUE))
+  
+  # Add a column, sig, that is TRUE if padj is <0.05, false otherwise
+  res <- res %>% mutate(sig = padj < 0.05)
+  
+  # Make a volcano plot to show differential gene expression for contrast
+  volcano_plot <- res %>% ggplot(aes(log2FoldChange, -1 * log10(pvalue), col = sig)) + 
+    geom_point() + 
+    ggtitle("Volcano plot of gene expression")
+  
+  # Create a PCA, coloring by disease state
+  rld <- vst(ddseq_obj)
+  pca_plot <- plotPCA(rld, intgroup = contrast_values[1])
+  
+  # Return the volcano plot and PCA plot
+  return(list(volcano_plot = volcano_plot, pca_plot = pca_plot))
+}
+
+perform_rnaseq_analysis(ddseq_go_BM, contrast_by_DiseaseState)
+perform_rnaseq_analysis(ddseq_go_PB, contrast_by_DiseaseState)
+perform_rnaseq_analysis(ddseq_go_Primary, contrast_by_OrganismPart)
+perform_rnaseq_analysis(ddseq_go_Recurrent, contrast_by_OrganismPart)
+
+
+######### EDIT BELOW HERE
 
 #Can also obtain all GO groups.
 #GO.wall=goseq(pwf,"hg19","ensGene")
@@ -162,7 +223,7 @@ GO.BP %>%
 #DESeq fills in the DEseq object with information including 
 #normalization, dispersion estimates, differential expression 
 #results, etc. This code can take a little while to run
-ddseq_obj <- DESeq(ddseq_obj)
+#ddseq_obj <- DESeq(ddseq_obj)
 
 #visualize the ddseq object in a dataframe
 res <- as_tibble(results(ddseq_obj,
