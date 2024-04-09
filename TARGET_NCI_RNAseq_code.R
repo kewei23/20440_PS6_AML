@@ -140,7 +140,7 @@ ddseq_go_Primary <- DESeq(ddseq_go_Primary)
 ddseq_go_Recurrent <- DESeq(ddseq_go_Recurrent)
 
 # Helper function! perform GO enrichment analysis, generate plots
-perform_GO_enrichment_analysis <- function(ddseq_obj, contrast_values, fdr_threshold) {
+plot_GO_enrichment <- function(ddseq_obj, contrast_values, fdr_threshold, title) {
   # Obtain DESeq results and filter by count threshold
   res <- results(ddseq_obj,
                  contrast = contrast_values,
@@ -170,7 +170,8 @@ perform_GO_enrichment_analysis <- function(ddseq_obj, contrast_values, fdr_thres
                size = numDEInCat)) +
     geom_point() +
     expand_limits(x = 0) +
-    labs(x = "Hits (%)", y = "GO term", colour = "p value", size = "Count")
+    labs(x = "Hits (%)", y = "GO term", colour = "p value", size = "Count") +
+    ggtitle(paste("GO terms:", title))
 }
 
 contrast_by_DiseaseState = c("Characteristics.DiseaseState.",
@@ -180,10 +181,15 @@ contrast_by_OrganismPart = c("Characteristics.OrganismPart.",
                               "Bone Marrow", 
                               "Peripheral Blood")
 
-perform_GO_enrichment_analysis(ddseq_go_BM, contrast_by_DiseaseState, fdr.threshold)
-perform_GO_enrichment_analysis(ddseq_go_PB, contrast_by_DiseaseState, fdr.threshold)
-perform_GO_enrichment_analysis(ddseq_go_Primary, contrast_by_OrganismPart, fdr.threshold)
-perform_GO_enrichment_analysis(ddseq_go_Recurrent,contrast_by_OrganismPart, fdr.threshold)
+plot_GO_enrichment(ddseq_go_BM, contrast_by_DiseaseState, fdr.threshold, 
+                   "BM - Primary vs Recurrent AML")
+plot_GO_enrichment(ddseq_go_PB, contrast_by_DiseaseState, fdr.threshold, 
+                   "PB - Primary vs Recurrent AML")
+plot_GO_enrichment(ddseq_go_Primary, contrast_by_OrganismPart, fdr.threshold, 
+                   "Primary Childhood AML - BM vs PB")
+plot_GO_enrichment(ddseq_go_Recurrent,contrast_by_OrganismPart, fdr.threshold, 
+                   "Recurrent Childhood AML - BM vs PB")
+
 
 #Helper function! RNAseq analysis:
 perform_rnaseq_analysis <- function(ddseq_obj, contrast_values, title) {
@@ -198,18 +204,20 @@ perform_rnaseq_analysis <- function(ddseq_obj, contrast_values, title) {
   # Make a volcano plot to show differential gene expression for contrast
   volcano_plot <- res %>% ggplot(aes(log2FoldChange, -1 * log10(pvalue), col = sig)) + 
     geom_point() + 
-    ggtitle("Volcano plot of gene expression")
+    ggtitle("Volcano plot of gene expression for ", title) + 
+    xlab("Log2 Fold Change") + 
+    ylab("-1 * Log10(p-value)")
   
   # Create a PCA, coloring by disease state
   rld <- vst(ddseq_obj)
-  pca_plot <- plotPCA(rld, intgroup = contrast_values[1])
+  pca_plot <- plotPCA(rld, intgroup = contrast_values[1]) +
+                        labs(title = paste("PCA plot -", title))
   
   # Return the volcano plot and PCA plot
   return(list(volcano_plot = volcano_plot, pca_plot = pca_plot))
 }
 
-perform_rnaseq_analysis(ddseq_go_BM, contrast_by_DiseaseState)
-perform_rnaseq_analysis(ddseq_go_PB, contrast_by_DiseaseState)
-perform_rnaseq_analysis(ddseq_go_Primary, contrast_by_OrganismPart)
-perform_rnaseq_analysis(ddseq_go_Recurrent, contrast_by_OrganismPart)
-
+perform_rnaseq_analysis(ddseq_go_BM, contrast_by_DiseaseState, "Bone Marrow - Primary vs Recurrent Childhood AML")
+perform_rnaseq_analysis(ddseq_go_PB, contrast_by_DiseaseState, "Peripheral Blood - Primary vs Recurrent Childhood AML")
+perform_rnaseq_analysis(ddseq_go_Primary, contrast_by_OrganismPart, "Primary Childhood AML - BM vs PB")
+perform_rnaseq_analysis(ddseq_go_Recurrent, contrast_by_OrganismPart, "Recurrent Childhood AML - BM vs PB")
