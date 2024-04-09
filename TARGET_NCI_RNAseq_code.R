@@ -213,37 +213,3 @@ perform_rnaseq_analysis(ddseq_go_PB, contrast_by_DiseaseState)
 perform_rnaseq_analysis(ddseq_go_Primary, contrast_by_OrganismPart)
 perform_rnaseq_analysis(ddseq_go_Recurrent, contrast_by_OrganismPart)
 
-
-######### EDIT BELOW HERE
-
-#Can also obtain all GO groups.
-#GO.wall=goseq(pwf,"hg19","ensGene")
-#head(GO.wall)
-
-#DESeq fills in the DEseq object with information including 
-#normalization, dispersion estimates, differential expression 
-#results, etc. This code can take a little while to run
-#ddseq_obj <- DESeq(ddseq_obj)
-
-#visualize the ddseq object in a dataframe
-res <- as_tibble(results(ddseq_obj,
-                         contrast=c("Characteristics.DiseaseState.", 
-                                    "Childhood Acute Myeloid Leukemia",
-                                    "Recurrent Childhood Acute Myeloid Leukemia"),
-                         tidy=TRUE))
-#Add a column, sig, that is TRUE if padj is <0.05, false otherwise.
-res <- res %>% mutate(sig=padj<0.05)
-
-#Make a volcano plot to show differential gene expression for childhood vs recurrent AML.
-#Not yet implemented: examine peripheral blood vs bone marrow samples
-#Not yet implemented: label genes in microenvironment sets.
-res %>% ggplot(aes(log2FoldChange, -1*log10(pvalue), col=sig)) + 
-  geom_point() + 
-  ggtitle("Volcano plot of gene expression for childhood vs recurrent AML")
-
-#Create a PCA, coloring by disease state.
-rld <- vst(ddseq_obj)
-plotPCA(rld, intgroup="Characteristics.DiseaseState.")
-
-
-
