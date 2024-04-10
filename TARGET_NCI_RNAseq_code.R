@@ -172,6 +172,8 @@ plot_GO_enrichment <- function(ddseq_obj, contrast_values, fdr_threshold, title)
     expand_limits(x = 0) +
     labs(x = "Hits (%)", y = "GO term", colour = "p value", size = "Count") +
     ggtitle(paste("GO terms:", title))
+  
+  return(GO_BP)
 }
 
 contrast_by_DiseaseState = c("Characteristics.DiseaseState.",
@@ -181,14 +183,15 @@ contrast_by_OrganismPart = c("Characteristics.OrganismPart.",
                               "Bone Marrow", 
                               "Peripheral Blood")
 
-plot_GO_enrichment(ddseq_go_BM, contrast_by_DiseaseState, fdr.threshold, 
-                   "BM - Primary vs Recurrent AML")
-plot_GO_enrichment(ddseq_go_PB, contrast_by_DiseaseState, fdr.threshold, 
-                   "PB - Primary vs Recurrent AML")
-plot_GO_enrichment(ddseq_go_Primary, contrast_by_OrganismPart, fdr.threshold, 
-                   "Primary Childhood AML - BM vs PB")
-plot_GO_enrichment(ddseq_go_Recurrent,contrast_by_OrganismPart, fdr.threshold, 
-                   "Recurrent Childhood AML - BM vs PB")
+GO_BP_BM <- plot_GO_enrichment(ddseq_go_BM, contrast_by_DiseaseState, fdr.threshold, 
+                               "BM - Primary vs Recurrent AML")
+GO_BP_PB <- plot_GO_enrichment(ddseq_go_PB, contrast_by_DiseaseState, fdr.threshold, 
+                               "PB - Primary vs Recurrent AML")
+GO_BP_Primary <- plot_GO_enrichment(ddseq_go_Primary, contrast_by_OrganismPart, fdr.threshold, 
+                                    "Primary Childhood AML - BM vs PB")
+GO_BP_Recurrent <- plot_GO_enrichment(ddseq_go_Recurrent, contrast_by_OrganismPart, fdr.threshold,
+                                      "Recurrent Childhood AML - BM vs PB")
+
 
 
 #Helper function! RNAseq analysis:
